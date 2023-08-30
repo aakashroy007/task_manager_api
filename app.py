@@ -1,51 +1,50 @@
-from flask import Flask, request
-from flask_restful import Api, Resource
+from flask import Flask, request, jsonify
 from flask_pymongo import PyMongo
-from flask_jwt_extended import JWTManager, jwt_required, create_access_token
-from config import MONGO_URI, JWT_SECRET_KEY
+from bson import ObjectId
+from config import MONGO_URI
+
 app = Flask(__name__)
 app.config['MONGO_URI'] = MONGO_URI
-app.config['JWT_SECRET_KEY'] = JWT_SECRET_KEY
-
 mongo = PyMongo(app)
-api = Api(app)
-jwt = JWTManager(app)
 
-class TaskResource(Resource):
-    @jwt_required()
-    def get(self, task_id):
-        task = mongo.db.tasks.find_one_or_404({'_id': task_id})
+@app.route('/tasks', methods=['POST'])
+def create_task():
+    data = request.json
+    task_id = mongo.db.tasks.insert_one(data).inserted_id
+    return jsonify({'message': 'Task created successfully', 'task_id': str(task_id)})
+
+@app.route('/tasks', methods=['GET'])
+def get_all_tasks():
+    tasks = list(mongo.db.tasks.find())
+    for task in tasks:
         task['_id'] = str(task['_id'])
-        return task
+    return jsonify(tasks)
 
-    @jwt_required()
-    def put(self, task_id):
-        task = mongo.db.tasks.find_one_or_404({'_id': task_id})
-        data = request.get_json()
-        mongo.db.tasks.update_one({'_id': task_id}, {'$set': data})
-        return {'message': 'Task updated successfully'}
+@app.route('/tasks/<task_id>', methods=['GET'])
+def get_task(task_id):
+    task = mongo.db.tasks.find_one({'_id': ObjectId(task_id)})
+    if task:
+        task['_id'] = str(task['_id'])
+        return jsonify(task)
+    else:
+        return jsonify({'message': 'Task not found'}), 404
 
-    @jwt_required()
-    def delete(self, task_id):
-        mongo.db.tasks.delete_one({'_id': task_id})
-        return {'message': 'Task deleted successfully'}
+@app.route('/tasks/<task_id>', methods=['PUT'])
+def update_task(task_id):
+    data = request.json
+    result = mongo.db.tasks.update_one({'_id': ObjectId(task_id)}, {'$set': data})
+    if result.modified_count > 0:
+        return jsonify({'message': 'Task updated successfully'})
+    else:
+        return jsonify({'message': 'Task not found'}), 404
 
-class TaskListResource(Resource):
-    @jwt_required()
-    def get(self):
-        tasks = list(mongo.db.tasks.find())
-        for task in tasks:
-            task['_id'] = str(task['_id'])
-        return tasks
-
-    @jwt_required()
-    def post(self):
-        data = request.get_json()
-        task_id = mongo.db.tasks.insert_one(data).inserted_id
-        return {'message': 'Task created successfully', 'task_id': str(task_id)}
-
-api.add_resource(TaskResource, '/tasks/<ObjectId:task_id>')
-api.add_resource(TaskListResource, '/tasks')
+@app.route('/tasks/<task_id>', methods=['DELETE'])
+def delete_task(task_id):
+    result = mongo.db.tasks.delete_one({'_id': ObjectId(task_id)})
+    if result.deleted_count > 0:
+        return jsonify({'message': 'Task deleted successfully'})
+    else:
+        return jsonify({'message': 'Task not found'}), 404
 
 if __name__ == '__main__':
     app.run(debug=True)
