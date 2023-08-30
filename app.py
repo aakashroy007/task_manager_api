@@ -30,7 +30,7 @@ class TaskNotFound(NotFound):
 
 
 def validate_task_data(data):
-    required_fields = ["title", "description", "status", "due_date"]
+    required_fields = ["title", "description", "status"]
     for field in required_fields:
         if field not in data:
             raise ValidationError(f"Missing required field: {field}")
